@@ -1,0 +1,9 @@
+{
+    "[rust]": {
+        "editor.formatOnSave": true
+    },
+    "files.exclude": {
+        "Cargo.lock": true,
+        "target": true
+    },
+}
