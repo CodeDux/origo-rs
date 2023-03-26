@@ -9,7 +9,6 @@ use crate::Command;
 
 pub struct JsonStorage {
     journal_file: File,
-    buffer: Vec<u8>,
 }
 
 impl JsonStorage {
@@ -25,7 +24,6 @@ impl JsonStorage {
                     File::create(path).unwrap()
                 }
             },
-            buffer: Vec::with_capacity(0),
         }
     }
 
@@ -51,35 +49,21 @@ impl JsonStorage {
         commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
     ) {
         let mut reader = BufReader::new(&self.journal_file);
-        let mut buffer = &mut self.buffer;
+        let mut buffer = vec![0u8; 0];
 
         let file_len = self.journal_file.metadata().unwrap().len();
 
         let mut entries_count = 0;
         loop {
-            buffer.clear();
-
-            // Read name of command to restore
-            let command_name = match reader.read_until(b'{', &mut buffer) {
-                Ok(bytes) if bytes > 0 => std::str::from_utf8(&buffer[..bytes - 1]).expect("msg"),
+            match reader.read_until(b'\n', &mut buffer) {
+                Ok(bytes) if bytes > 0 => {}
                 _ => break,
             };
-
-            // Find the command
-            let command = commands.get(command_name).unwrap();
-            let start = buffer.len() - 1; // The index for including the `{` in the `ComandName{`
-
-            // Read the rest of the line until we get to the end `\n`
-            let command_data = match reader.read_until(b'\n', &mut buffer) {
-                Ok(bytes) if bytes > 0 => &buffer[start..],
-                _ => break,
-            };
-
             // IF we don't end on `\n` that means that it was a failed command
             // we need to:
             // - Ignore the current row
             // - Shrink the file to where the row started
-            match command_data.last() {
+            match buffer.last() {
                 Some(byte) if byte == &b'\n' => {}
                 _ => {
                     self.journal_file
@@ -89,7 +73,14 @@ impl JsonStorage {
                 }
             }
 
+            let command_name_length = buffer.iter().position(|c| c == &b'{').unwrap();
+            let (command_name_bytes, command_data) = buffer.split_at(command_name_length);
+
+            let command_name = std::str::from_utf8(&command_name_bytes).unwrap();
+            let command = commands.get(command_name).unwrap();
+
             command(command_data, model);
+            buffer.clear();
             entries_count += 1;
         }
 
