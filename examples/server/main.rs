@@ -44,17 +44,17 @@ fn main() {
 
     let result = engine.query(|model| model.orders.len());
     println!("Total orders before insert: {result}");
-
-    insert_orders(&engine, result);
+    println!("Inserting new orders....");
+    insert_orders(&engine);
 
     let result = engine.query(|model| model.orders.len());
     println!("Total orders after insert: {result}");
 }
 
-fn insert_orders(engine: &origo::Engine<EcomModel>, start: usize) {
+fn insert_orders(engine: &origo::Engine<EcomModel>) {
     let mut join_handles = Vec::<JoinHandle<()>>::with_capacity(10);
 
-    for i in start..start + 1000 {
+    for i in 0..5_000 {
         let en = engine.clone();
         let handle = thread::spawn(move || {
             en.execute(&InsertOrder {
@@ -71,7 +71,7 @@ fn insert_orders(engine: &origo::Engine<EcomModel>, start: usize) {
         });
         join_handles.push(handle);
 
-        if i % 100 == 0 {
+        if i % 10 == 0 {
             for handle in join_handles {
                 handle.join().unwrap();
             }
