@@ -1,5 +1,7 @@
 Nothing special, just trying things with Rust to learn more about it
 
+This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state.
+
 ## Run example
 `cargo run -r --example server`
 
