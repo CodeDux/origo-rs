@@ -1,4 +1,4 @@
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path, sync::Arc};
 
@@ -10,8 +10,7 @@ pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
 }
 
 pub struct Engine<TModel: Default> {
-    model: Arc<RwLock<TModel>>,
-    storage: Arc<Mutex<JsonStorage>>,
+    inner: Arc<RwLock<(TModel, JsonStorage)>>,
 }
 
 impl<TModel: Default> Engine<TModel> {
@@ -22,11 +21,10 @@ impl<TModel: Default> Engine<TModel> {
     ///
     /// Before executing the command it's written to the journal
     pub fn execute<'de, T: Command<'de, TModel>>(&self, command: &T) {
-        let mut storage = self.storage.lock();
-        let mut model = self.model.write();
-        storage.prepare_command::<TModel, T>(command);
-        command.execute(&mut model);
-        storage.commit_command();
+        let mut inner = self.inner.write();
+        inner.1.prepare_command::<TModel, T>(command);
+        command.execute(&mut inner.0);
+        inner.1.commit_command();
     }
 
     /// Execute the given query against the current model
@@ -34,16 +32,15 @@ impl<TModel: Default> Engine<TModel> {
     /// Multiple queries can execute against the model at the same time
     /// but no writes will happen during queries (The model is ReadWriteLocked)
     pub fn query<R, F: FnOnce(&TModel) -> R>(&self, query: F) -> R {
-        let model = self.model.read();
-        query(&model)
+        let inner = self.inner.read();
+        query(&inner.0)
     }
 }
 
 impl<TModel: Default> Clone for Engine<TModel> {
     fn clone(&self) -> Self {
         Self {
-            model: self.model.clone(),
-            storage: self.storage.clone(),
+            inner: self.inner.clone(),
         }
     }
 }
@@ -80,8 +77,7 @@ impl<TModel: Default> EngineBuilder<TModel> {
             .restore::<TModel>(&mut self.model, &self.commands);
 
         Engine {
-            model: Arc::new(RwLock::new(self.model)),
-            storage: Arc::new(Mutex::new(self.storage)),
+            inner: Arc::new(RwLock::new((self.model, self.storage))),
         }
     }
 }
