@@ -38,7 +38,7 @@ fn insert_test_data(engine: &Engine<EcomModel>) -> () {
     }
 }
 
-async fn fetch_order<'a>(req: Request<Engine<EcomModel>>) -> tide::Result {
+async fn fetch_order(req: Request<Engine<EcomModel>>) -> tide::Result {
     let id = req.param("id").unwrap().parse::<usize>().unwrap();
     let result = req.state().query(|m| match m.orders.get(&id) {
         Some(order) => Some(order.clone()),
@@ -55,7 +55,7 @@ async fn fetch_order<'a>(req: Request<Engine<EcomModel>>) -> tide::Result {
     })
 }
 
-async fn place_order<'a>(mut req: Request<Engine<EcomModel>>) -> tide::Result {
+async fn place_order(mut req: Request<Engine<EcomModel>>) -> tide::Result {
     match req.body_json::<InsertOrder>().await {
         Ok(command) => {
             req.state().execute(&command);
