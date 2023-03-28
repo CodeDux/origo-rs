@@ -1,20 +1,22 @@
 mod commands;
 mod models;
-use origo::{origo_engine, Engine};
-use tide::Body;
-use tide::Request;
+use tide::{Body, Request};
 use {commands::*, models::*};
+
+/// Makes it easier, `req: Request<Db>` in functions
+/// instead of `req: Request<Engine<EComModel>>`
+type Db = origo::Engine<EcomModel>;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
-    let engine = origo_engine! {
+    let db = origo::origo_engine! {
         EcomModel: "./data/test.origors",
         InsertOrder,
     };
 
-    insert_test_data(&engine);
+    insert_test_data(&db);
 
-    let mut app = tide::with_state(engine);
+    let mut app = tide::with_state(db);
     app.at("/orders")
         .post(place_order)
         .at("/:id")
@@ -23,14 +25,14 @@ async fn main() -> tide::Result<()> {
     Ok(())
 }
 
-fn insert_test_data(engine: &Engine<EcomModel>) -> () {
-    if engine.query(|m| m.orders.len() == 0) {
+fn insert_test_data(db: &Db) -> () {
+    if db.query(|m| m.orders.len() == 0) {
         let test_data = InsertOrder {
             order_id: 1,
             name: "TestOrder".to_string(),
             transport_id: 2,
         };
-        engine.execute(&test_data);
+        db.execute(&test_data);
         println!(
             "Inserted test-data: {}",
             serde_json::to_string_pretty(&test_data).unwrap()
@@ -38,7 +40,7 @@ fn insert_test_data(engine: &Engine<EcomModel>) -> () {
     }
 }
 
-async fn fetch_order(req: Request<Engine<EcomModel>>) -> tide::Result {
+async fn fetch_order(req: Request<Db>) -> tide::Result {
     let id = req.param("id").unwrap().parse::<usize>().unwrap();
     let result = req.state().query(|m| match m.orders.get(&id) {
         Some(order) => Some(order.clone()),
@@ -55,7 +57,7 @@ async fn fetch_order(req: Request<Engine<EcomModel>>) -> tide::Result {
     })
 }
 
-async fn place_order(mut req: Request<Engine<EcomModel>>) -> tide::Result {
+async fn place_order(mut req: Request<Db>) -> tide::Result {
     match req.body_json::<InsertOrder>().await {
         Ok(command) => {
             req.state().execute(&command);
