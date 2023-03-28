@@ -1,7 +1,9 @@
 # **THIS IS JUST A PROOF-OF-CONCEPT PROJECT FOR ME/MYSELF&I**
-<small>Nothing special, just trying things with Rust to learn more about it.</small>
+*Nothing special, just trying things with Rust to learn more about it.*
 
 This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state.
+
+See the [Example](examples/server/) for example of implementation in a http-server (tide)
 
 ## Run example
 `cargo run -r --example server`
