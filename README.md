@@ -1,4 +1,5 @@
-Nothing special, just trying things with Rust to learn more about it
+# **THIS IS JUST A PROOF-OF-CONCEPT PROJECT FOR ME/MYSELF&I**
+<small>Nothing special, just trying things with Rust to learn more about it.</small>
 
 This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state.
 
