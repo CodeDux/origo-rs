@@ -1,16 +1,18 @@
 mod commands;
 mod models;
+use origo::JsonStorage;
 use tide::{Body, Request};
 use {commands::*, models::*};
 
 /// Makes it easier, `req: Request<Db>` in functions
 /// instead of `req: Request<Engine<EComModel>>`
-type Db = origo::Engine<EcomModel>;
+type Db = origo::Engine<EcomModel, JsonStorage>;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let db = origo::origo_engine! {
-        EcomModel: "./data/test.origors",
+        EcomModel,
+        JsonStorage::new("./data/test.origors"),
         InsertOrder,
     };
 

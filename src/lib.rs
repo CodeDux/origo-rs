@@ -5,8 +5,8 @@ pub use storage::*;
 
 #[macro_export]
 macro_rules! origo_engine {
-    ($model:ty:$path:literal, $($y:ty,)+) => {{
-        let mut engine = $crate::EngineBuilder::<$model>::new($path);
+    ($model:ty, $storage:expr, $($y:ty,)+) => {{
+        let mut engine = $crate::EngineBuilder::new(<$model>::default(), $storage);
         $crate::__attach_command! {
             engine $($y);+;
         }

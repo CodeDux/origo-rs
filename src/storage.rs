@@ -7,6 +7,16 @@ use std::{
 
 use crate::Command;
 
+pub trait Storage {
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, command: &T);
+    fn commit_command(&mut self);
+    fn restore<TModel>(
+        &mut self,
+        model: &mut TModel,
+        commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
+    );
+}
+
 pub struct JsonStorage {
     journal_file: File,
 }
@@ -26,8 +36,10 @@ impl JsonStorage {
             },
         }
     }
+}
 
-    pub fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, command: &T) {
+impl Storage for JsonStorage {
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, command: &T) {
         let identifier = T::identifier();
 
         self.journal_file
@@ -36,14 +48,14 @@ impl JsonStorage {
         serde_json::to_writer(&self.journal_file, command).expect("Failed to write payload");
     }
 
-    pub fn commit_command(&mut self) {
+    fn commit_command(&mut self) {
         self.journal_file
             .write_all(&[b'\n'])
             .expect("Failed to write ending");
         self.journal_file.flush().expect("Failed to flush");
     }
 
-    pub fn restore<TModel>(
+    fn restore<TModel>(
         &mut self,
         model: &mut TModel,
         commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
@@ -86,8 +98,20 @@ impl JsonStorage {
 
         println!("Loaded {entries_count} events");
     }
+}
 
-    pub fn writer(&self) -> &File {
-        &self.journal_file
+/// This does nothing with commands, truly in-memory mode with no persistance state
+pub struct NoopStorage;
+
+impl Storage for NoopStorage {
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, _command: &T) {}
+
+    fn commit_command(&mut self) {}
+
+    fn restore<TModel>(
+        &mut self,
+        _model: &mut TModel,
+        _commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
+    ) {
     }
 }

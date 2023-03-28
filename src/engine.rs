@@ -1,19 +1,19 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use crate::storage::JsonStorage;
+use crate::storage::Storage;
 
 pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
     fn execute(&self, model: &mut TModel);
     fn identifier() -> &'static str;
 }
 
-pub struct Engine<TModel: Default> {
-    inner: Arc<RwLock<(TModel, JsonStorage)>>,
+pub struct Engine<TModel: Default, TStorage> {
+    inner: Arc<RwLock<(TModel, TStorage)>>,
 }
 
-impl<TModel: Default> Engine<TModel> {
+impl<TModel: Default, TStorage: Storage> Engine<TModel, TStorage> {
     /// Execute the given command against the current model
     ///
     /// Commands execute in exclusive mode,
@@ -37,7 +37,7 @@ impl<TModel: Default> Engine<TModel> {
     }
 }
 
-impl<TModel: Default> Clone for Engine<TModel> {
+impl<TModel: Default, TStorage> Clone for Engine<TModel, TStorage> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -45,17 +45,17 @@ impl<TModel: Default> Clone for Engine<TModel> {
     }
 }
 
-pub struct EngineBuilder<TModel: Default> {
+pub struct EngineBuilder<TModel: Default, TStorage> {
     model: TModel,
-    storage: JsonStorage,
+    storage: TStorage,
     commands: HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
 }
 
-impl<TModel: Default> EngineBuilder<TModel> {
-    pub fn new<T: AsRef<Path>>(path: T) -> EngineBuilder<TModel> {
+impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
+    pub fn new(model: TModel, storage: TStorage) -> EngineBuilder<TModel, TStorage> {
         EngineBuilder {
-            model: Default::default(),
-            storage: JsonStorage::new(path),
+            model,
+            storage,
             commands: HashMap::new(),
         }
     }
@@ -72,7 +72,7 @@ impl<TModel: Default> EngineBuilder<TModel> {
         self
     }
 
-    pub fn build(mut self) -> Engine<TModel> {
+    pub fn build(mut self) -> Engine<TModel, TStorage> {
         self.storage
             .restore::<TModel>(&mut self.model, &self.commands);
 

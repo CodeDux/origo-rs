@@ -63,7 +63,8 @@ impl<'a> Command<'a, EcomModel> for InsertOrder<'a> {
 This is done with the `origo_engine!` macro
 ```
 origo_engine! {
-    MainModelType: "path to store the journal",
+    MainModelType,
+    StorageImplementation,
     CommandTypeToSupport,
     CommandTypeToSupport,
     ... more CommandTypesToSupport
@@ -74,9 +75,9 @@ like this
 use origo::origo_engine;
 //..
 let engine = origo_engine! {
-    EcomModel: "./data/test.origors",
+    EcomModel,
+    JsonStorage::new("./data/test.origors"),
     InsertOrder,
-    InsertOrder2,
 };
 ```
 
