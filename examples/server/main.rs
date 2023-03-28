@@ -1,93 +1,66 @@
 mod commands;
 mod models;
-use commands::*;
-use fake::{faker, Fake};
-use models::*;
-use origo::origo_engine;
+use origo::{origo_engine, Engine};
+use tide::Body;
+use tide::Request;
+use {commands::*, models::*};
 
-use std::{
-    io::stdout,
-    thread::{self, JoinHandle},
-    time::Instant,
-};
-
-fn main() {
-    let now = Instant::now();
-
+#[async_std::main]
+async fn main() -> tide::Result<()> {
     let engine = origo_engine! {
         EcomModel: "./data/test.origors",
         InsertOrder,
-        InsertOrder2,
     };
 
-    println!("Startup: {}ms", now.elapsed().as_millis());
+    insert_test_data(&engine);
 
-    // Query orders
-    let now = Instant::now();
-    let ids = [12, 24, 2285];
-    let orders: Vec<Order> = engine.query(|model| {
-        ids.iter()
-            .map(|id| model.orders.get(&id))
-            .filter(|o| o.is_some())
-            .map(|o| o.unwrap().clone())
-            .collect()
+    let mut app = tide::with_state(engine);
+    app.at("/orders")
+        .post(place_order)
+        .at("/:id")
+        .get(fetch_order);
+    app.listen("127.0.0.1:8080").await?;
+    Ok(())
+}
+
+fn insert_test_data(engine: &Engine<EcomModel>) -> () {
+    if engine.query(|m| m.orders.len() == 0) {
+        let test_data = InsertOrder {
+            order_id: 1,
+            name: "TestOrder".to_string(),
+            transport_id: 2,
+        };
+        engine.execute(&test_data);
+        println!(
+            "Inserted test-data: {}",
+            serde_json::to_string_pretty(&test_data).unwrap()
+        )
+    }
+}
+
+async fn fetch_order<'a>(req: Request<Engine<EcomModel>>) -> tide::Result {
+    let id = req.param("id").unwrap().parse::<usize>().unwrap();
+    let result = req.state().query(|m| match m.orders.get(&id) {
+        Some(order) => Some(order.clone()),
+        None => None,
     });
-    println!("Query: {}ns", now.elapsed().as_nanos());
 
-    // Print result of query
-    for order in orders {
-        _ = serde_json::to_writer_pretty(stdout(), &order);
-        println!();
-    }
-
-    println!();
-
-    let result = engine.query(|model| model.orders.len());
-    println!("Total orders before insert: {result}");
-    println!("Inserting new orders....");
-    insert_orders(&engine);
-
-    let result = engine.query(|model| model.orders.len());
-    println!("Total orders after insert: {result}");
-}
-
-fn insert_orders(engine: &origo::Engine<EcomModel>) {
-    let mut join_handles = Vec::<JoinHandle<()>>::with_capacity(10);
-
-    for i in 0..5_000 {
-        let en = engine.clone();
-        let handle = thread::spawn(move || {
-            en.execute(&InsertOrder {
-                name: &fake_name(),
-                order_id: fake_id(),
-                transport_id: fake_id(),
-            });
-
-            en.execute(&InsertOrder2 {
-                name: &fake_name(),
-                order_id: fake_id(),
-                transport_id: fake_id(),
-            });
-        });
-        join_handles.push(handle);
-
-        if i % 10 == 0 {
-            for handle in join_handles {
-                handle.join().unwrap();
-            }
-            join_handles = Vec::<JoinHandle<()>>::with_capacity(10);
+    Ok(match result {
+        Some(order) => {
+            let mut res = tide::Response::new(200);
+            res.set_body(Body::from_json(&order).unwrap());
+            res
         }
-    }
-
-    for handle in join_handles {
-        handle.join().unwrap();
-    }
+        None => tide::Response::new(404),
+    })
 }
 
-fn fake_name() -> String {
-    faker::name::en::Name().fake()
-}
-
-fn fake_id() -> usize {
-    (1337..1_000_000).fake::<usize>()
+async fn place_order<'a>(mut req: Request<Engine<EcomModel>>) -> tide::Result {
+    match req.body_json::<InsertOrder>().await {
+        Ok(command) => {
+            req.state().execute(&command);
+            Ok(tide::Response::new(200))
+        }
+        Err(e) => Err(e),
+    }
 }
