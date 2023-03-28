@@ -104,7 +104,7 @@ engine.execute(&InsertOrder {
 ## Threading
 The engine implements `Clone` and one instance should be created on startup, then pass clones to threads that needs to execute commands or query data.
 
-The model is wrapped in a `RwLock` to support multiple queries or one command at any given time.
+The model and storage access internally is wrapped in a `RwLock` to support multiple reads(queries) or one write(command) at any given time.
 ```rust
 let en = engine.clone();
 let handle = thread::spawn(move || {
