@@ -35,13 +35,13 @@ use origo::Command;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-pub struct InsertOrder<'a> {
+pub struct InsertOrder {
     pub order_id: usize,
-    pub name: &'a str,
+    pub name: String,
     pub transport_id: usize,
 }
 
-impl<'a> Command<'a, EcomModel> for InsertOrder<'a> {
+impl<'a> Command<'a, EcomModel> for InsertOrder {
     fn execute(&self, model: &mut EcomModel) {
         model.orders.insert(
             self.order_id,
@@ -85,18 +85,17 @@ let engine = origo_engine! {
 #### Query
 ```rust
 let ids = [12, 24, 2285];
-let orders: Vec<Order> = engine.query(|model| {
+let orders: Vec<Order> = db.query(|model| {
     ids.iter()
-        .map(|id| model.orders.get(&id))
-        .filter(|o| o.is_some())
-        .map(|o| o.unwrap().clone())
+        .filter_map(|id| model.orders.get(id))
+        .cloned()
         .collect()
 });
 ```
 #### Execute Commands
 ```rust
 engine.execute(&InsertOrder {
-    name: &fake_name(),
+    name: fake_name(),
     order_id: fake_id(),
     transport_id: fake_id(),
 });
@@ -110,7 +109,7 @@ The model and storage access internally is wrapped in a `RwLock` to support mult
 let en = engine.clone();
 let handle = thread::spawn(move || {
     en.execute(&InsertOrder {
-        name: &fake_name(),
+        name: fake_name(),
         order_id: fake_id(),
         transport_id: fake_id(),
     });
