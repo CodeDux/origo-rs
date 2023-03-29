@@ -1,5 +1,7 @@
 mod commands;
 mod models;
+use std::time::Instant;
+
 use origo::JsonStorage;
 use tide::{Body, Request};
 use {commands::*, models::*};
@@ -10,11 +12,13 @@ type Db = origo::Engine<EcomModel, JsonStorage>;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
+    let instant = Instant::now();
     let db = origo::origo_engine! {
         EcomModel,
         JsonStorage::new("./data/test.origors"),
         InsertOrder,
     };
+    println!("Startup: {}ms", instant.elapsed().as_millis());
 
     insert_test_data(&db);
 
