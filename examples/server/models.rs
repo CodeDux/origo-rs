@@ -1,9 +1,9 @@
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct EcomModel {
-    pub orders: HashMap<usize, Order>,
+    pub orders: FxHashMap<usize, Order>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
