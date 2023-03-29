@@ -26,7 +26,7 @@ macro_rules! __attach_command {
 
     };
 
-    ($engine:ident $e:ty;$($y:ty;);+) => {
+    ($engine:ident $e:ty;$($y:ty);+) => {
         $engine = $engine.register_command::<$e>(Box::new(|data, model| {
             let command = serde_json::from_slice::<$e>(data)
                 .unwrap();
