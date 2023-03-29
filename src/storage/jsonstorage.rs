@@ -49,7 +49,7 @@ impl Storage for JsonStorage {
     fn restore<TModel>(
         &mut self,
         model: &mut TModel,
-        commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
+        commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel)>>,
     ) {
         let mut reader = BufReader::new(&self.journal_file);
         let mut buffer = vec![0u8; 0];
@@ -81,7 +81,7 @@ impl Storage for JsonStorage {
             let command_name_length = buffer.iter().position(|c| c == &b'{').unwrap();
             let (command_name_bytes, command_data) = buffer.split_at(command_name_length);
 
-            let command_name = std::str::from_utf8(&command_name_bytes).unwrap();
+            let command_name = std::str::from_utf8(command_name_bytes).unwrap();
             let command = commands.get(command_name).unwrap();
 
             command(command_data, model);

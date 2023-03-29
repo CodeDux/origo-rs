@@ -31,8 +31,8 @@ async fn main() -> tide::Result<()> {
     Ok(())
 }
 
-fn insert_test_data(db: &Db) -> () {
-    if db.query(|m| m.orders.len() == 0) {
+fn insert_test_data(db: &Db) {
+    if db.query(|m| m.orders.is_empty()) {
         let test_data = InsertOrder {
             order_id: 1,
             name: "TestOrder".to_string(),
@@ -48,10 +48,7 @@ fn insert_test_data(db: &Db) -> () {
 
 async fn fetch_order(req: Request<Db>) -> tide::Result {
     let id = req.param("id").unwrap().parse::<usize>().unwrap();
-    let result = req.state().query(|m| match m.orders.get(&id) {
-        Some(order) => Some(order.clone()),
-        None => None,
-    });
+    let result = req.state().query(|m| m.orders.get(&id).cloned());
 
     Ok(match result {
         Some(order) => {

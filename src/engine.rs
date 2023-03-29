@@ -4,6 +4,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::storage::Storage;
 
+pub type CommandExecutor<TModel> = Box<dyn Fn(&[u8], &mut TModel)>;
+
 pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
     fn execute(&self, model: &mut TModel);
     fn identifier() -> &'static str;
@@ -48,7 +50,7 @@ impl<TModel: Default, TStorage> Clone for Engine<TModel, TStorage> {
 pub struct EngineBuilder<TModel: Default, TStorage> {
     model: TModel,
     storage: TStorage,
-    commands: HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
+    commands: HashMap<String, CommandExecutor<TModel>>,
 }
 
 impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
@@ -60,7 +62,7 @@ impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         }
     }
 
-    pub fn register_command<'a, T>(mut self, f: Box<dyn Fn(&[u8], &mut TModel)>) -> Self
+    pub fn register_command<'a, T>(mut self, f: CommandExecutor<TModel>) -> Self
     where
         T: Command<'a, TModel>,
     {

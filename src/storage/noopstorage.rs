@@ -13,7 +13,7 @@ impl Storage for NoopStorage {
     fn restore<TModel>(
         &mut self,
         _model: &mut TModel,
-        _commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel) -> ()>>,
+        _commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel)>>,
     ) {
     }
 }
