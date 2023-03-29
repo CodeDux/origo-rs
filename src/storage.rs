@@ -1,9 +1,10 @@
 mod noopstorage;
 pub use noopstorage::*;
+
 use std::{
     collections::HashMap,
     fs::File,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Seek, Write},
     path::Path,
 };
 
@@ -31,9 +32,9 @@ impl JsonStorage {
                 false => {
                     if let Some(directory) = path.as_ref().parent() {
                         std::fs::create_dir_all(directory)
-                            .expect("Failed to create directory structure");
+                            .expect("Failed to create directory structure for ");
                     }
-                    File::create(path).unwrap()
+                    File::create(path).expect("Failed to create journal-file")
                 }
             },
         }
@@ -73,18 +74,20 @@ impl Storage for JsonStorage {
                 Ok(bytes) if bytes > 0 => {}
                 _ => break,
             };
+
             // IF we don't end on `\n` that means that it was a failed command
             // we need to:
             // - Ignore the current row
             // - Shrink the file to where the row started
             match buffer.last() {
-                Some(byte) if byte == &b'\n' => {}
-                _ => {
+                Some(&b'\n') => {}
+                Some(_) if file_len == reader.stream_position().unwrap_or(0) => {
+                    println!("Removing corrupt entry");
                     self.journal_file
                         .set_len(file_len - buffer.len() as u64)
-                        .unwrap();
-                    break;
+                        .expect("Couldn't shrink journal");
                 }
+                _ => panic!("Corrupt journal"),
             }
 
             let command_name_length = buffer.iter().position(|c| c == &b'{').unwrap();
