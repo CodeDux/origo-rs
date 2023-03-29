@@ -73,8 +73,7 @@ impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
     }
 
     pub fn build(mut self) -> Engine<TModel, TStorage> {
-        self.storage
-            .restore::<TModel>(&mut self.model, &self.commands);
+        self.storage.restore(&mut self.model, &self.commands);
 
         Engine {
             inner: Arc::new(RwLock::new((self.model, self.storage))),
