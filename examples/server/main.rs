@@ -20,6 +20,9 @@ async fn main() -> tide::Result<()> {
     };
     println!("Startup: {}ms", instant.elapsed().as_millis());
 
+    let order_count = db.query(|m| m.orders.len());
+    println!("{order_count} orders in db");
+
     insert_test_data(&db);
 
     let mut app = tide::with_state(db);

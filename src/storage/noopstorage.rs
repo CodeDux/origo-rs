@@ -6,7 +6,12 @@ use std::collections::HashMap;
 pub struct NoopStorage;
 
 impl Storage for NoopStorage {
-    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, _command: &T) {}
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(
+        &mut self,
+        _command_name: &str,
+        _command: &T,
+    ) {
+    }
 
     fn commit_command(&mut self) {}
 

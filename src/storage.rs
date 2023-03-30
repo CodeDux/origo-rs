@@ -8,7 +8,11 @@ use crate::{Command, CommandExecutor};
 use std::collections::HashMap;
 
 pub trait Storage {
-    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, command: &T);
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(
+        &mut self,
+        command_name: &str,
+        command: &T,
+    );
     fn commit_command(&mut self);
     fn restore<TModel>(
         &mut self,

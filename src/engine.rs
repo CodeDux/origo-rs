@@ -1,6 +1,6 @@
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use std::{any::TypeId, collections::HashMap, sync::Arc};
 
 use crate::storage::Storage;
 
@@ -8,11 +8,16 @@ pub type CommandExecutor<TModel> = Box<dyn Fn(&[u8], &mut TModel)>;
 
 pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
     fn execute(&self, model: &mut TModel);
-    fn identifier() -> &'static str;
 }
 
-pub struct Engine<TModel: Default, TStorage> {
-    inner: Arc<RwLock<(TModel, TStorage)>>,
+pub struct Engine<TModel, TStorage> {
+    inner: Arc<RwLock<ModelAndStorage<TModel, TStorage>>>,
+    commands: Arc<HashMap<TypeId, String>>,
+}
+
+pub struct ModelAndStorage<TModel, TStorage> {
+    model: TModel,
+    storage: TStorage,
 }
 
 impl<TModel: Default, TStorage: Storage> Engine<TModel, TStorage> {
@@ -22,11 +27,22 @@ impl<TModel: Default, TStorage: Storage> Engine<TModel, TStorage> {
     /// meaning that no other writes OR queries will happen until the command finishes (The model is ReadWriteLocked)
     ///
     /// Before executing the command it's written to the journal
-    pub fn execute<'de, T: Command<'de, TModel>>(&self, command: &T) {
+    pub fn execute<'de, T>(&self, command: &T)
+    where
+        T: Command<'de, TModel> + 'static,
+    {
+        let command_name: &str = self
+            .commands
+            .get(&TypeId::of::<T>())
+            .expect("Couldn't find command_name");
+
         let mut inner = self.inner.write();
-        inner.1.prepare_command::<TModel, T>(command);
-        command.execute(&mut inner.0);
-        inner.1.commit_command();
+
+        inner
+            .storage
+            .prepare_command::<TModel, T>(command_name, command);
+        command.execute(&mut inner.model);
+        inner.storage.commit_command();
     }
 
     /// Execute the given query against the current model
@@ -35,14 +51,15 @@ impl<TModel: Default, TStorage: Storage> Engine<TModel, TStorage> {
     /// but no writes will happen during queries (The model is ReadWriteLocked)
     pub fn query<R, F: FnOnce(&TModel) -> R>(&self, query: F) -> R {
         let inner = self.inner.read();
-        query(&inner.0)
+        query(&inner.model)
     }
 }
 
-impl<TModel: Default, TStorage> Clone for Engine<TModel, TStorage> {
+impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            commands: self.commands.clone(),
         }
     }
 }
@@ -51,6 +68,7 @@ pub struct EngineBuilder<TModel: Default, TStorage> {
     model: TModel,
     storage: TStorage,
     commands: HashMap<String, CommandExecutor<TModel>>,
+    command_names_by_id: HashMap<TypeId, String>,
 }
 
 impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
@@ -59,18 +77,20 @@ impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
             model,
             storage,
             commands: HashMap::new(),
+            command_names_by_id: HashMap::new(),
         }
     }
 
-    pub fn register_command<'a, T>(mut self, f: CommandExecutor<TModel>) -> Self
+    pub fn register_command<'a, T>(mut self, name: &str, f: CommandExecutor<TModel>) -> Self
     where
-        T: Command<'a, TModel>,
+        T: Command<'a, TModel> + 'static,
     {
-        let name = T::identifier();
+        let id = TypeId::of::<T>();
         assert!(!name.contains('{'));
         println!("Adding: {}", name);
 
         self.commands.insert(name.to_string(), f);
+        self.command_names_by_id.insert(id, name.to_string());
         self
     }
 
@@ -78,7 +98,11 @@ impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         self.storage.restore(&mut self.model, &self.commands);
 
         Engine {
-            inner: Arc::new(RwLock::new((self.model, self.storage))),
+            inner: Arc::new(RwLock::new(ModelAndStorage {
+                model: self.model,
+                storage: self.storage,
+            })),
+            commands: Arc::new(self.command_names_by_id),
         }
     }
 }

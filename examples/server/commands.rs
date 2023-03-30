@@ -20,8 +20,4 @@ impl<'a> Command<'a, EcomModel> for InsertOrder {
             },
         );
     }
-
-    fn identifier() -> &'static str {
-        "InsertOrder"
-    }
 }

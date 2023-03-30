@@ -1,5 +1,5 @@
 use super::Storage;
-use crate::Command;
+use crate::{Command, CommandExecutor};
 
 use std::{
     collections::HashMap,
@@ -30,11 +30,13 @@ impl JsonStorage {
 }
 
 impl Storage for JsonStorage {
-    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, command: &T) {
-        let identifier = T::identifier();
-
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(
+        &mut self,
+        command_name: &str,
+        command: &T,
+    ) {
         self.journal_file
-            .write_all(identifier.as_bytes())
+            .write_all(command_name.as_bytes())
             .expect("Failed to write identifier");
         serde_json::to_writer(&self.journal_file, command).expect("Failed to write payload");
     }
@@ -49,7 +51,7 @@ impl Storage for JsonStorage {
     fn restore<TModel>(
         &mut self,
         model: &mut TModel,
-        commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel)>>,
+        commands: &HashMap<String, CommandExecutor<TModel>>,
     ) {
         let mut reader = BufReader::new(&self.journal_file);
         let mut buffer = vec![0u8; 0];

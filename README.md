@@ -1,7 +1,7 @@
 # **THIS IS JUST A PROOF-OF-CONCEPT PROJECT FOR ME/MYSELF&I**
-*Nothing special, just trying things with Rust to learn more about it.*
+**Nothing special, just trying things with Rust to learn more about it.**
 
-This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state.
+This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state, the code can be "broken" at any given day, **THIS IS A PROOF-OF-CONCEPT PROJECT**
 
 See the [Example](examples/server/) for example of implementation in a http-server (tide)
 
@@ -51,10 +51,6 @@ impl<'a> Command<'a, EcomModel> for InsertOrder {
                 transport_id: self.transport_id,
             },
         );
-    }
-
-    fn identifier() -> &'static str {
-        "InsertOrder"
     }
 }
 ```
