@@ -86,7 +86,6 @@ impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         T: Command<'a, TModel> + 'static,
     {
         let id = TypeId::of::<T>();
-        assert!(!name.contains('{'));
         println!("Adding: {}", name);
 
         self.commands.insert(name.to_string(), f);
