@@ -24,7 +24,7 @@ macro_rules! origo_engine {
             $crate::Storage::deserialize::<$model, $e>(storage, data, model);
         }));
         $crate::origo_engine!{
-            $engine $($y),+
+            $engine $model, $($y),+
         }
     };
 }
