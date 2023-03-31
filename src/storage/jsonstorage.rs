@@ -51,7 +51,7 @@ impl Storage for JsonStorage {
     fn restore<TModel>(
         &mut self,
         model: &mut TModel,
-        commands: &HashMap<String, CommandExecutor<TModel>>,
+        commands: &HashMap<String, CommandExecutor<JsonStorage, TModel>>,
     ) {
         let mut reader = BufReader::new(&self.journal_file);
         let mut buffer = vec![0u8; 0];
@@ -86,11 +86,20 @@ impl Storage for JsonStorage {
             let command_name = std::str::from_utf8(command_name_bytes).unwrap();
             let command = commands.get(command_name).unwrap();
 
-            command(command_data, model);
+            command(self, command_data, model);
             buffer.clear();
             entries_count += 1;
         }
 
         println!("Loaded {entries_count} events");
+    }
+
+    fn deserialize<'de, TModel, T: Command<'de, TModel>>(
+        &self,
+        data: &'de [u8],
+        model: &mut TModel,
+    ) {
+        let command = serde_json::from_slice::<T>(data).unwrap();
+        command.execute(model);
     }
 }

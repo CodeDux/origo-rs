@@ -1,5 +1,5 @@
 use super::Storage;
-use crate::Command;
+use crate::{Command, CommandExecutor};
 use std::collections::HashMap;
 
 /// This does nothing with commands, truly in-memory mode with no persistance state
@@ -18,7 +18,13 @@ impl Storage for NoopStorage {
     fn restore<TModel>(
         &mut self,
         _model: &mut TModel,
-        _commands: &HashMap<String, Box<dyn Fn(&[u8], &mut TModel)>>,
+        _commands: &HashMap<String, CommandExecutor<NoopStorage, TModel>>,
+    ) {
+    }
+    fn deserialize<'de, TModel, T: Command<'de, TModel>>(
+        &self,
+        _data: &'de [u8],
+        _model: &mut TModel,
     ) {
     }
 }
