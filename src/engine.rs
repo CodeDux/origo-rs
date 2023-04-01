@@ -39,10 +39,10 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
         storage.prepare_command::<TModel, T>(command_name, command);
 
         // Here we lock the model so no queries can happen before the new state is applied and
-        // commited to disk.
+        // commited.
         //
         // We also keep holding the lock on storage since we don't know if we are "safe" until
-        // we commited/flushed the command (with commit indicator `\n` in the end)
+        // we commited/flushed the command
         let mut model = self.model.write();
         command.execute(&mut model);
         storage.commit_command();
