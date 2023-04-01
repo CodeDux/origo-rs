@@ -84,9 +84,9 @@ impl Storage for JsonStorage {
             let (command_name_bytes, command_data) = buffer.split_at(command_name_length);
 
             let command_name = std::str::from_utf8(command_name_bytes).unwrap();
-            let command = commands.get(command_name).unwrap();
+            let command_restore_fn = commands.get(command_name).unwrap();
 
-            command(self, command_data, model);
+            command_restore_fn(self, command_data, model);
             buffer.clear();
             entries_count += 1;
         }
