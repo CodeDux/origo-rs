@@ -13,18 +13,18 @@ macro_rules! origo_engine {
         engine.build()
     }};
 
-    ($engine:ident $model:ty, $e:ty) => {
-        $engine = $engine.register_command::<$e>(stringify!($e), Box::new(|storage, data, model| {
-            $crate::Storage::deserialize::<$model, $e>(storage, data, model);
+    ($engine:ident $model:ty, $command:ty) => {
+        $engine = $engine.register_command::<$command>(stringify!($command), Box::new(|storage, data, model| {
+            $crate::Storage::restore_command::<$model, $command>(storage, data, model);
         }));
     };
 
-    ($engine:ident $model:ty, $e:ty, $($y:ty),+) => {
-        $engine = $engine.register_command::<$e>(stringify!($e), Box::new(|storage, data, model| {
-            $crate::Storage::deserialize::<$model, $e>(storage, data, model);
-        }));
+    ($engine:ident $model:ty, $command:ty, $($commands:ty),+) => {
         $crate::origo_engine!{
-            $engine $model, $($y),+
+            $engine $model, $command
+        }
+        $crate::origo_engine!{
+            $engine $model, $($commands),+
         }
     };
 }

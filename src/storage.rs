@@ -19,7 +19,7 @@ pub trait Storage {
         model: &mut TModel,
         commands: &HashMap<String, CommandExecutor<Self, TModel>>,
     );
-    fn deserialize<'de, TModel, T: Command<'de, TModel>>(
+    fn restore_command<'de, TModel, T: Command<'de, TModel>>(
         &self,
         data: &'de [u8],
         model: &mut TModel,

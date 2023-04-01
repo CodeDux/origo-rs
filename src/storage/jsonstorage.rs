@@ -94,7 +94,7 @@ impl Storage for JsonStorage {
         println!("Loaded {entries_count} events");
     }
 
-    fn deserialize<'de, TModel, T: Command<'de, TModel>>(
+    fn restore_command<'de, TModel, T: Command<'de, TModel>>(
         &self,
         data: &'de [u8],
         model: &mut TModel,

@@ -21,7 +21,7 @@ impl Storage for NoopStorage {
         _commands: &HashMap<String, CommandExecutor<NoopStorage, TModel>>,
     ) {
     }
-    fn deserialize<'de, TModel, T: Command<'de, TModel>>(
+    fn restore_command<'de, TModel, T: Command<'de, TModel>>(
         &self,
         _data: &'de [u8],
         _model: &mut TModel,
