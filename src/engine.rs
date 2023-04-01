@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::{any::TypeId, collections::HashMap, sync::Arc};
 
@@ -11,20 +11,17 @@ pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
 }
 
 pub struct Engine<TModel, TStorage> {
-    inner: Arc<RwLock<ModelAndStorage<TModel, TStorage>>>,
+    model: Arc<RwLock<TModel>>,
+    storage: Arc<Mutex<TStorage>>,
     commands: Arc<HashMap<TypeId, String>>,
-}
-
-pub struct ModelAndStorage<TModel, TStorage> {
-    model: TModel,
-    storage: TStorage,
 }
 
 impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
     /// Execute the given command against the current model
     ///
     /// Commands execute in exclusive mode,
-    /// meaning that no other writes OR queries will happen until the command finishes (The model is ReadWriteLocked)
+    /// meaning that no other writes OR queries will happen until the command finishes
+    /// (The model is ReadWriteLocked)
     ///
     /// Before executing the command it's written to the journal
     pub fn execute<'de, T>(&self, command: &T)
@@ -36,13 +33,19 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
             .get(&TypeId::of::<T>())
             .expect("Couldn't find command_name");
 
-        let mut inner = self.inner.write();
+        // We lock storage before the model so we can allow queries during the possible storage IO
+        // This is the reason for storing `storage` and `model` in separate locks
+        let mut storage = self.storage.lock();
+        storage.prepare_command::<TModel, T>(command_name, command);
 
-        inner
-            .storage
-            .prepare_command::<TModel, T>(command_name, command);
-        command.execute(&mut inner.model);
-        inner.storage.commit_command();
+        // Here we lock the model so no queries can happen before the new state is applied and
+        // commited to disk.
+        //
+        // We also keep holding the lock on storage since we don't know if we are "safe" until
+        // we commited/flushed the command (with commit indicator `\n` in the end)
+        let mut model = self.model.write();
+        command.execute(&mut model);
+        storage.commit_command();
     }
 
     /// Execute the given query against the current model
@@ -50,15 +53,16 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
     /// Multiple queries can execute against the model at the same time
     /// but no writes will happen during queries (The model is ReadWriteLocked)
     pub fn query<R, F: FnOnce(&TModel) -> R>(&self, query: F) -> R {
-        let inner = self.inner.read();
-        query(&inner.model)
+        let model = self.model.read();
+        query(&model)
     }
 }
 
 impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            model: self.model.clone(),
+            storage: self.storage.clone(),
             commands: self.commands.clone(),
         }
     }
@@ -101,10 +105,8 @@ impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         self.storage.restore(&mut self.model, &self.commands);
 
         Engine {
-            inner: Arc::new(RwLock::new(ModelAndStorage {
-                model: self.model,
-                storage: self.storage,
-            })),
+            model: Arc::new(RwLock::new(self.model)),
+            storage: Arc::new(Mutex::new(self.storage)),
             commands: Arc::new(self.command_names_by_id),
         }
     }
