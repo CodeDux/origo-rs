@@ -80,7 +80,7 @@ let engine = origo_engine! {
 #### Query
 ```rust
 let ids = [12, 24, 2285];
-let orders: Vec<Order> = db.query(|model| {
+let orders: Vec<Order> = engine.query(|model| {
     ids.iter()
         .filter_map(|id| model.orders.get(id))
         .cloned()
