@@ -20,7 +20,7 @@ pub struct ModelAndStorage<TModel, TStorage> {
     storage: TStorage,
 }
 
-impl<TModel: Default, TStorage: Storage> Engine<TModel, TStorage> {
+impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
     /// Execute the given command against the current model
     ///
     /// Commands execute in exclusive mode,
@@ -64,14 +64,14 @@ impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
     }
 }
 
-pub struct EngineBuilder<TModel: Default, TStorage> {
+pub struct EngineBuilder<TModel, TStorage> {
     model: TModel,
     storage: TStorage,
     commands: HashMap<String, CommandExecutor<TStorage, TModel>>,
     command_names_by_id: HashMap<TypeId, String>,
 }
 
-impl<TModel: Default, TStorage: Storage> EngineBuilder<TModel, TStorage> {
+impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
     pub fn new(model: TModel, storage: TStorage) -> EngineBuilder<TModel, TStorage> {
         EngineBuilder {
             model,
