@@ -68,7 +68,7 @@ impl Storage for JsonStorage {
             match buffer.last() {
                 Some(&b'\n') => {}
                 Some(_) if file_len == reader.stream_position().unwrap_or(0) => {
-                    println!("Removing corrupt entry");
+                    log::warn!("Removing corrupt entry");
                     self.journal_file
                         .set_len(file_len - buffer.len() as u64)
                         .expect("Couldn't shrink journal");
@@ -88,7 +88,7 @@ impl Storage for JsonStorage {
             entries_count += 1;
         }
 
-        println!("Loaded {entries_count} events");
+        log::debug!("Loaded {entries_count} events");
     }
 
     fn restore_command<'de, TModel, T: Command<'de, TModel>>(

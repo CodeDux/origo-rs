@@ -5,7 +5,7 @@ This is a in-memory database that journals commands to disk and replays the comm
 See the [Example](examples/server/) for example of implementation in a http-server (tide)
 
 ## Run example
-`cargo run -r --example server`
+`RUST_LOG=debug cargo run -r --example server`
 
 ## How it works
 ### Declare your models
@@ -54,14 +54,14 @@ impl<'a> Command<'a, EcomModel> for InsertOrder {
 }
 ```
 
-### Create engine for model and commands
+### Create engine for model, storage and commands
 This is done with the `origo_engine!` macro
 ```
 origo_engine! {
     MainModelType,
     StorageImplementation,
-    CommandTypeToSupport,
-    CommandTypeToSupport,
+    CommandTypeToSupport1,
+    CommandTypeToSupport2,
     ... more CommandTypesToSupport
 };
 ```
@@ -73,6 +73,7 @@ let engine = origo_engine! {
     EcomModel,
     JsonStorage::new("./data/test.origors"),
     InsertOrder,
+    // Here you keep listing all the commands that the engine should support
 };
 ```
 

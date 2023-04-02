@@ -12,16 +12,18 @@ type Db = origo::Engine<EcomModel, JsonStorage>;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
+    env_logger::init();
     let instant = Instant::now();
     let db = origo::origo_engine! {
         EcomModel,
         JsonStorage::new("./data/test.origors"),
         InsertOrder,
     };
-    println!("Startup: {}ms", instant.elapsed().as_millis());
+
+    log::info!("Startup: {}ms", instant.elapsed().as_millis());
 
     let order_count = db.query(|m| m.orders.len());
-    println!("{order_count} orders in db");
+    log::info!("{order_count} orders in db");
 
     insert_test_data(&db);
 
@@ -42,7 +44,7 @@ fn insert_test_data(db: &Db) {
             transport_id: 2,
         };
         db.execute(&test_data);
-        println!(
+        log::info!(
             "Inserted test-data: {}",
             serde_json::to_string_pretty(&test_data).unwrap()
         )

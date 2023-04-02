@@ -104,7 +104,7 @@ impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         name: &str,
         restore_fn: CommandRestoreFn<TStorage, TModel>,
     ) -> Self {
-        println!("Adding: {}", name);
+        log::debug!("Registring command: {}", name);
 
         self.restore_fns.insert(name.to_string(), restore_fn);
         self.typeid_names
