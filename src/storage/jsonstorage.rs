@@ -72,6 +72,7 @@ impl Storage for JsonStorage {
                     self.journal_file
                         .set_len(file_len - buffer.len() as u64)
                         .expect("Couldn't shrink journal");
+                    break;
                 }
                 _ => panic!("Corrupt journal"),
             }
