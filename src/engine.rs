@@ -4,7 +4,7 @@ use std::{any::TypeId, collections::HashMap, sync::Arc};
 
 use crate::storage::Storage;
 
-pub type CommandExecutor<TStorage, TModel> = Box<dyn Fn(&TStorage, &[u8], &mut TModel)>;
+pub type CommandRestoreFn<TStorage, TModel> = Box<dyn Fn(&TStorage, &[u8], &mut TModel)>;
 
 pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
     fn execute(&self, model: &mut TModel);
@@ -13,7 +13,7 @@ pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
 pub struct Engine<TModel, TStorage> {
     model: Arc<RwLock<TModel>>,
     storage: Arc<Mutex<TStorage>>,
-    commands: Arc<HashMap<TypeId, String>>,
+    typeid_names: Arc<HashMap<TypeId, String>>,
 }
 
 impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
@@ -28,15 +28,15 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
     where
         T: Command<'de, TModel> + 'static,
     {
-        let command_name: &str = self
-            .commands
+        let name: &str = self
+            .typeid_names
             .get(&TypeId::of::<T>())
             .expect("Couldn't find command_name");
 
         // We lock storage before the model so we can allow queries during the possible storage IO
         // This is the reason for storing `storage` and `model` in separate locks
         let mut storage = self.storage.lock();
-        storage.prepare_command::<TModel, T>(command_name, command);
+        storage.prepare_command::<TModel, T>(name, command);
 
         // Here we lock the model so no queries can happen before the new state is applied and
         // commited.
@@ -63,16 +63,19 @@ impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
         Self {
             model: self.model.clone(),
             storage: self.storage.clone(),
-            commands: self.commands.clone(),
+            typeid_names: self.typeid_names.clone(),
         }
     }
 }
 
+/// Used to build and restore an engine for `TModel` with `TStorage`
+///
+/// **DON'T USE THIS, use the [`crate::origo_engine`] macro**
 pub struct EngineBuilder<TModel, TStorage> {
     model: TModel,
     storage: TStorage,
-    commands: HashMap<String, CommandExecutor<TStorage, TModel>>,
-    command_names_by_id: HashMap<TypeId, String>,
+    restore_fns: HashMap<String, CommandRestoreFn<TStorage, TModel>>,
+    typeid_names: HashMap<TypeId, String>,
 }
 
 impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
@@ -80,34 +83,42 @@ impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
         EngineBuilder {
             model,
             storage,
-            commands: HashMap::new(),
-            command_names_by_id: HashMap::new(),
+            restore_fns: HashMap::new(),
+            typeid_names: HashMap::new(),
         }
     }
 
-    pub fn register_command<'a, T>(
+    /// Register command that the engine should be able to execute AND store + restore
+    ///
+    /// It works by taking the `TypeId` of `T` while also receiving the name of the command,
+    /// with this it creates a runtime mapping that is used to map stored data with runtime types
+    ///
+    /// The `TypeId` and name is used by the engine to map between the Command -> TypeId -> Name when:
+    /// - Executing a command, we get the `TypeId` of the executing command and with that we get the name,
+    /// the name is then stored with the serialized data.
+    /// - Restoring the model, we have the names stored with the serialized data and for example:
+    /// The [`crate::JsonStorage`] uses that name to fetch the [`CommandRestoreFn`],
+    /// then it knows how to deserialize that command from the journal
+    pub fn register_command<'a, T: Command<'a, TModel> + 'static>(
         mut self,
         name: &str,
-        f: CommandExecutor<TStorage, TModel>,
-    ) -> Self
-    where
-        T: Command<'a, TModel> + 'static,
-    {
-        let id = TypeId::of::<T>();
+        restore_fn: CommandRestoreFn<TStorage, TModel>,
+    ) -> Self {
         println!("Adding: {}", name);
 
-        self.commands.insert(name.to_string(), f);
-        self.command_names_by_id.insert(id, name.to_string());
+        self.restore_fns.insert(name.to_string(), restore_fn);
+        self.typeid_names
+            .insert(TypeId::of::<T>(), name.to_string());
         self
     }
 
     pub fn build(mut self) -> Engine<TModel, TStorage> {
-        self.storage.restore(&mut self.model, &self.commands);
+        self.storage.restore(&mut self.model, &self.restore_fns);
 
         Engine {
             model: Arc::new(RwLock::new(self.model)),
             storage: Arc::new(Mutex::new(self.storage)),
-            commands: Arc::new(self.command_names_by_id),
+            typeid_names: Arc::new(self.typeid_names),
         }
     }
 }

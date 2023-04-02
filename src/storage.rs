@@ -4,7 +4,7 @@ pub use noopstorage::NoopStorage;
 mod jsonstorage;
 pub use jsonstorage::JsonStorage;
 
-use crate::{Command, CommandExecutor};
+use crate::{Command, CommandRestoreFn};
 use std::collections::HashMap;
 
 pub trait Storage {
@@ -17,7 +17,7 @@ pub trait Storage {
     fn restore<TModel>(
         &mut self,
         model: &mut TModel,
-        commands: &HashMap<String, CommandExecutor<Self, TModel>>,
+        restore_fns: &HashMap<String, CommandRestoreFn<Self, TModel>>,
     );
     fn restore_command<'de, TModel, T: Command<'de, TModel>>(
         &self,

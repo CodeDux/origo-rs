@@ -1,5 +1,5 @@
 use super::Storage;
-use crate::{Command, CommandExecutor};
+use crate::{Command, CommandRestoreFn};
 
 use std::{
     collections::HashMap,
@@ -30,13 +30,9 @@ impl JsonStorage {
 }
 
 impl Storage for JsonStorage {
-    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(
-        &mut self,
-        command_name: &str,
-        command: &T,
-    ) {
+    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(&mut self, name: &str, command: &T) {
         self.journal_file
-            .write_all(command_name.as_bytes())
+            .write_all(name.as_bytes())
             .expect("Failed to write identifier");
         serde_json::to_writer(&self.journal_file, command).expect("Failed to write payload");
     }
@@ -51,7 +47,7 @@ impl Storage for JsonStorage {
     fn restore<TModel>(
         &mut self,
         model: &mut TModel,
-        commands: &HashMap<String, CommandExecutor<JsonStorage, TModel>>,
+        restore_fns: &HashMap<String, CommandRestoreFn<JsonStorage, TModel>>,
     ) {
         let mut reader = BufReader::new(&self.journal_file);
         let mut buffer = vec![0u8; 0];
@@ -84,9 +80,9 @@ impl Storage for JsonStorage {
             let (command_name_bytes, command_data) = buffer.split_at(command_name_length);
 
             let command_name = std::str::from_utf8(command_name_bytes).unwrap();
-            let command_restore_fn = commands.get(command_name).unwrap();
+            let restore_fn = restore_fns.get(command_name).unwrap();
 
-            command_restore_fn(self, command_data, model);
+            restore_fn(self, command_data, model);
             buffer.clear();
             entries_count += 1;
         }
