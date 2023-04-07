@@ -1,5 +1,5 @@
 use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{any::TypeId, collections::HashMap, sync::Arc};
 
 use crate::storage::Storage;
@@ -16,7 +16,9 @@ pub struct Engine<TModel, TStorage> {
     typeid_names: Arc<HashMap<TypeId, String>>,
 }
 
-impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
+impl<TModel: Serialize + Send + Sync + 'static, TStorage: Storage + Send + 'static>
+    Engine<TModel, TStorage>
+{
     /// Execute the given command against the current model
     ///
     /// Commands execute in exclusive mode,
@@ -31,7 +33,7 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
         let name: &str = self
             .typeid_names
             .get(&TypeId::of::<T>())
-            .expect("Couldn't find command_name");
+            .expect("Couldn't find command name");
 
         // We lock storage before the model so we can allow queries during the possible storage IO
         // This is the reason for storing `storage` and `model` in separate locks
@@ -40,12 +42,26 @@ impl<TModel, TStorage: Storage> Engine<TModel, TStorage> {
 
         // Here we lock the model so no queries can happen before the new state is applied and
         // commited.
-        //
-        // We also keep holding the lock on storage since we don't know if we are "safe" until
-        // we commited/flushed the command
-        let mut model = self.model.write();
-        command.execute(&mut model);
-        storage.commit_command();
+        let commit_result = {
+            let mut model = self.model.write();
+            command.execute(&mut model);
+            storage.commit_command()
+        };
+
+        // Since we still hold the lock on storage (and no writes can happen until we release it)
+        // we check if we should take a snapshot
+        match commit_result {
+            Ok(0) => {
+                let clone = self.clone();
+                std::thread::spawn(move || {
+                    let mut storage2 = clone.storage.lock();
+                    let model2 = clone.model.read();
+                    storage2.snapshot(&*model2);
+                });
+            }
+            Ok(_) => {}
+            Err(_) => todo!("What will we do?, hard fail? any way to recover?"),
+        }
     }
 
     /// Execute the given query against the current model
@@ -78,7 +94,7 @@ pub struct EngineBuilder<TModel, TStorage> {
     typeid_names: HashMap<TypeId, String>,
 }
 
-impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
+impl<TModel: Default + DeserializeOwned, TStorage: Storage> EngineBuilder<TModel, TStorage> {
     pub fn new(model: TModel, storage: TStorage) -> EngineBuilder<TModel, TStorage> {
         EngineBuilder {
             model,
@@ -113,7 +129,7 @@ impl<TModel, TStorage: Storage> EngineBuilder<TModel, TStorage> {
     }
 
     pub fn build(mut self) -> Engine<TModel, TStorage> {
-        self.storage.restore(&mut self.model, &self.restore_fns);
+        self.model = self.storage.restore(&self.restore_fns);
 
         Engine {
             model: Arc::new(RwLock::new(self.model)),

@@ -1,7 +1,6 @@
 mod engine;
-mod storage;
+pub mod storage;
 pub use engine::*;
-pub use storage::*;
 
 #[macro_export]
 macro_rules! origo_engine {
@@ -15,7 +14,7 @@ macro_rules! origo_engine {
 
     ($engine:ident $model:ty, $command:ty) => {
         $engine = $engine.register_command::<$command>(stringify!($command), Box::new(|storage, data, model| {
-            $crate::Storage::restore_command::<$model, $command>(storage, data, model);
+            $crate::storage::Storage::restore_command::<$model, $command>(storage, data, model);
         }));
     };
 

@@ -2,7 +2,7 @@ mod commands;
 mod models;
 use std::time::Instant;
 
-use origo::JsonStorage;
+use origo::storage::JsonStorage;
 use tide::{Body, Request};
 use {commands::*, models::*};
 
@@ -10,13 +10,16 @@ use {commands::*, models::*};
 /// instead of `req: Request<Engine<EComModel>>`
 type Db = origo::Engine<EcomModel, JsonStorage>;
 
+const MAX_COMMAND_COUNT: u32 = 100_000;
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     env_logger::init();
+
     let instant = Instant::now();
     let db = origo::origo_engine! {
         EcomModel,
-        JsonStorage::new("./data/test.origors"),
+        JsonStorage::new("./data/test.origors", MAX_COMMAND_COUNT),
         InsertOrder,
     };
 
@@ -44,10 +47,7 @@ fn insert_test_data(db: &Db) {
             transport_id: 2,
         };
         db.execute(&test_data);
-        log::info!(
-            "Inserted test-data: {}",
-            serde_json::to_string_pretty(&test_data).unwrap()
-        )
+        log::info!("Inserted test-data: ");
     }
 }
 

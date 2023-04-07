@@ -2,10 +2,11 @@
 
 This is a in-memory database that journals commands to disk and replays the commands on startup to recreate the state, the code can be "broken" at any given day, **THIS IS A PROOF-OF-CONCEPT PROJECT, just trying things with Rust to learn more about it.**
 
-See the [Example](examples/server/) for example of implementation in a http-server (tide)
-
-## Run example
-`RUST_LOG=debug cargo run -r --example server`
+## Run server
+Run the following in the repository root
+```bash
+RUST_LOG="tide=off, debug" cargo run -r -p server
+```
 
 ## How it works
 ### Declare your models
