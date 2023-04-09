@@ -1,12 +1,17 @@
+use bincode::{Decode, Encode};
 use parking_lot::{Mutex, RwLock};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use crate::storage::Storage;
 
-pub type CommandRestoreFn<TStorage, TModel> = Box<dyn Fn(&TStorage, &[u8], &mut TModel)>;
+pub type CommandRestoreFn<TModel> =
+    Box<dyn Fn(&[u8], &mut TModel, bincode::config::Configuration) -> bool>;
 
-pub trait Command<'de, TModel>: Serialize + Deserialize<'de> {
+pub trait Command<TModel>: Encode + Decode {
     fn execute(&self, model: &mut TModel);
 }
 
@@ -14,11 +19,18 @@ pub struct Engine<TModel, TStorage> {
     model: Arc<RwLock<TModel>>,
     storage: Arc<Mutex<TStorage>>,
     typeid_names: Arc<HashMap<TypeId, String>>,
+    snapshot_command_count: Arc<AtomicU64>,
 }
 
-impl<TModel: Serialize + Send + Sync + 'static, TStorage: Storage + Send + 'static>
+impl<TModel: Encode + Decode + Send + Sync + 'static, TStorage: Storage + Send + 'static>
     Engine<TModel, TStorage>
 {
+    /// How many commands are allowed before (automatically) taking a snapshot
+    pub fn snapshot_command_count(&self, count: u64) {
+        self.snapshot_command_count
+            .store(count, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Execute the given command against the current model
     ///
     /// Commands execute in exclusive mode,
@@ -26,9 +38,9 @@ impl<TModel: Serialize + Send + Sync + 'static, TStorage: Storage + Send + 'stat
     /// (The model is ReadWriteLocked)
     ///
     /// Before executing the command it's written to the journal
-    pub fn execute<'de, T>(&self, command: &T)
+    pub fn execute<T>(&self, command: T)
     where
-        T: Command<'de, TModel> + 'static,
+        T: Command<TModel> + 'static,
     {
         let name: &str = self
             .typeid_names
@@ -38,29 +50,28 @@ impl<TModel: Serialize + Send + Sync + 'static, TStorage: Storage + Send + 'stat
         // We lock storage before the model so we can allow queries during the possible storage IO
         // This is the reason for storing `storage` and `model` in separate locks
         let mut storage = self.storage.lock();
-        storage.prepare_command::<TModel, T>(name, command);
 
-        // Here we lock the model so no queries can happen before the new state is applied and
-        // commited.
-        let commit_result = {
-            let mut model = self.model.write();
-            command.execute(&mut model);
-            storage.commit_command()
-        };
+        storage.prepare(name, &command);
+
+        // Here we lock the model so no queries can happen before the new state is applied
+        // and committed.
+        let mut model = self.model.write();
+        command.execute(&mut model);
+        let command_count = storage.commit();
 
         // Since we still hold the lock on storage (and no writes can happen until we release it)
         // we check if we should take a snapshot
-        match commit_result {
-            Ok(0) => {
-                let clone = self.clone();
-                std::thread::spawn(move || {
-                    let mut storage2 = clone.storage.lock();
-                    let model2 = clone.model.read();
-                    storage2.snapshot(&*model2);
-                });
-            }
-            Ok(_) => {}
-            Err(_) => todo!("What will we do?, hard fail? any way to recover?"),
+        if command_count
+            == self
+                .snapshot_command_count
+                .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let clone = self.clone();
+            std::thread::spawn(move || {
+                let mut storage2 = clone.storage.lock();
+                let model2 = clone.model.read();
+                storage2.snapshot(&*model2);
+            });
         }
     }
 
@@ -68,6 +79,7 @@ impl<TModel: Serialize + Send + Sync + 'static, TStorage: Storage + Send + 'stat
     ///
     /// Multiple queries can execute against the model at the same time
     /// but no writes will happen during queries (The model is ReadWriteLocked)
+    #[inline(always)]
     pub fn query<R, F: FnOnce(&TModel) -> R>(&self, query: F) -> R {
         let model = self.model.read();
         query(&model)
@@ -80,6 +92,7 @@ impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
             model: self.model.clone(),
             storage: self.storage.clone(),
             typeid_names: self.typeid_names.clone(),
+            snapshot_command_count: self.snapshot_command_count.clone(),
         }
     }
 }
@@ -90,11 +103,11 @@ impl<TModel, TStorage> Clone for Engine<TModel, TStorage> {
 pub struct EngineBuilder<TModel, TStorage> {
     model: TModel,
     storage: TStorage,
-    restore_fns: HashMap<String, CommandRestoreFn<TStorage, TModel>>,
+    restore_fns: HashMap<String, CommandRestoreFn<TModel>>,
     typeid_names: HashMap<TypeId, String>,
 }
 
-impl<TModel: Default + DeserializeOwned, TStorage: Storage> EngineBuilder<TModel, TStorage> {
+impl<TModel: Default + Decode, TStorage: Storage> EngineBuilder<TModel, TStorage> {
     pub fn new(model: TModel, storage: TStorage) -> EngineBuilder<TModel, TStorage> {
         EngineBuilder {
             model,
@@ -113,18 +126,37 @@ impl<TModel: Default + DeserializeOwned, TStorage: Storage> EngineBuilder<TModel
     /// - Executing a command, we get the `TypeId` of the executing command and with that we get the name,
     /// the name is then stored with the serialized data.
     /// - Restoring the model, we have the names stored with the serialized data and for example:
-    /// The [`crate::JsonStorage`] uses that name to fetch the [`CommandRestoreFn`],
+    /// The [`crate::storage::DiskStorage`] uses that name to fetch the [`CommandRestoreFn`],
     /// then it knows how to deserialize that command from the journal
-    pub fn register_command<'a, T: Command<'a, TModel> + 'static>(
+    pub fn register_command<T: Command<TModel> + 'static>(
         mut self,
-        name: &str,
-        restore_fn: CommandRestoreFn<TStorage, TModel>,
+        persistent_identifier: &str,
     ) -> Self {
-        log::debug!("Registring command: {}", name);
+        log::debug!("Registering command: {}", persistent_identifier);
 
-        self.restore_fns.insert(name.to_string(), restore_fn);
-        self.typeid_names
-            .insert(TypeId::of::<T>(), name.to_string());
+        let restore_fn: CommandRestoreFn<TModel> = Box::new(|data, model, config| {
+            match bincode::decode_from_slice::<T, _>(data, config) {
+                Ok((command, _)) => {
+                    command.execute(model);
+                    true
+                }
+                Err(_) => false, // TODO: report the error to caller in some way
+            }
+        });
+
+        match self
+            .restore_fns
+            .insert(persistent_identifier.to_string(), restore_fn)
+        {
+            Some(_) => panic!(
+                "Command with name {} already registered",
+                persistent_identifier
+            ),
+            None => self
+                .typeid_names
+                .insert(TypeId::of::<T>(), persistent_identifier.to_string()),
+        };
+
         self
     }
 
@@ -135,6 +167,7 @@ impl<TModel: Default + DeserializeOwned, TStorage: Storage> EngineBuilder<TModel
             model: Arc::new(RwLock::new(self.model)),
             storage: Arc::new(Mutex::new(self.storage)),
             typeid_names: Arc::new(self.typeid_names),
+            snapshot_command_count: Arc::new(AtomicU64::new(u64::MAX)),
         }
     }
 }

@@ -1,9 +1,9 @@
 [workspace]
 
 members = [
-    "origo",
-    "server",
-]
+    'origo',
+    'server',
+]   
 
 [profile.release]
 panic = 'abort'

@@ -1,51 +1,21 @@
-mod noopstorage;
-pub use noopstorage::NoopStorage;
+mod disk;
+pub use disk::DiskStorage;
 
-mod jsonstorage;
-pub use jsonstorage::JsonStorage;
-
-use serde::{de::DeserializeOwned, Serialize};
+mod noop;
+pub use noop::NoopStorage;
 
 use crate::engine::{Command, CommandRestoreFn};
 use std::collections::HashMap;
 
-pub type CommitResult = Result<i64, CommitError>;
-
-pub struct CommitError;
-
 pub trait Storage {
-    fn prepare_command<'de, TModel, T: Command<'de, TModel>>(
+    fn prepare<TModel, T: Command<TModel>>(&mut self, command_name: &str, command: &T);
+
+    fn commit(&mut self) -> u64;
+
+    fn snapshot<TModel: bincode::Encode>(&mut self, model: &TModel);
+
+    fn restore<TModel: Default + bincode::Decode>(
         &mut self,
-        command_name: &str,
-        command: &T,
-    );
-
-    fn commit_command(&mut self) -> CommitResult;
-
-    fn snapshot<TModel: Serialize>(&mut self, model: &TModel);
-
-    fn restore<TModel: Default + DeserializeOwned>(
-        &mut self,
-        restore_fns: &HashMap<String, CommandRestoreFn<Self, TModel>>,
+        restore_fns: &HashMap<String, CommandRestoreFn<TModel>>,
     ) -> TModel;
-
-    fn restore_command<'de, TModel, T: Command<'de, TModel>>(
-        &self,
-        data: &'de [u8],
-        model: &mut TModel,
-    );
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::TrieNode;
-
-//     #[test]
-//     fn add_works() {
-//         let word = "Test";
-//         let root = TrieNode {
-//             character: b'a',
-//             children: Vec::new(),
-//         };
-//     }
-//}

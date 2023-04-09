@@ -1,21 +1,22 @@
 use crate::models::{EcomModel, Order};
+use bincode::{Decode, Encode};
 use origo::Command;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct InsertOrder {
     pub order_id: usize,
     pub name: String,
     pub transport_id: usize,
 }
 
-impl<'a> Command<'a, EcomModel> for InsertOrder {
+impl Command<EcomModel> for InsertOrder {
     fn execute(&self, model: &mut EcomModel) {
         model.orders.insert(
             self.order_id,
             Order {
                 order_id: self.order_id,
-                name: self.name.to_string(),
+                name: self.name.clone(),
                 transport_id: self.transport_id,
             },
         );

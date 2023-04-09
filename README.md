@@ -5,49 +5,55 @@ This is a in-memory database that journals commands to disk and replays the comm
 ## Run server
 Run the following in the repository root
 ```bash
+## uses .cargo/config.toml
+cargo run server
+```
+or
+```bash
 RUST_LOG="tide=off, debug" cargo run -r -p server
 ```
 
 ## How it works
 ### Declare your models
 ```rust
-use serde::{Deserialize, Serialize};
+// For Origo
+use bincode::{Decode, Encode};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Encode, Decode, Default)]
 pub struct EcomModel {
     pub orders: HashMap<usize, Order>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Encode, Decode, Clone)]
 pub struct Order {
     pub order_id: usize,
     pub name: String,
     pub transport_id: usize,
 }
-
 ```
 
 ### Declare commands
 ```rust
 use crate::models::{EcomModel, Order};
 use origo::Command;
-use serde::{Deserialize, Serialize};
+// For Origo
+use bincode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Encode, Decode)]
 pub struct InsertOrder {
     pub order_id: usize,
     pub name: String,
     pub transport_id: usize,
 }
 
-impl<'a> Command<'a, EcomModel> for InsertOrder {
+impl Command<EcomModel> for InsertOrder {
     fn execute(&self, model: &mut EcomModel) {
         model.orders.insert(
             self.order_id,
             Order {
                 order_id: self.order_id,
-                name: self.name.to_string(),
+                name: self.name.clone(),
                 transport_id: self.transport_id,
             },
         );
@@ -70,19 +76,19 @@ like this
 ```rust
 use origo::origo_engine;
 //..
-let engine = origo_engine! {
+let db = origo_engine! {
     EcomModel,
-    JsonStorage::new("./data/test.origors"),
+    DiskStorage::new("./data/test.origors"),
     InsertOrder,
     // Here you keep listing all the commands that the engine should support
 };
 ```
 
-### Use the engine
+### Usage
 #### Query
 ```rust
 let ids = [12, 24, 2285];
-let orders: Vec<Order> = engine.query(|model| {
+let orders: Vec<Order> = db.query(|model| {
     ids.iter()
         .filter_map(|id| model.orders.get(id))
         .cloned()
@@ -91,11 +97,17 @@ let orders: Vec<Order> = engine.query(|model| {
 ```
 #### Execute Commands
 ```rust
-engine.execute(&InsertOrder {
+db.execute(&InsertOrder {
     name: fake_name(),
     order_id: fake_id(),
     transport_id: fake_id(),
 });
+```
+
+#### Snapshots
+Configure automatic snapshots by calling `snapshot_command_count` with the amount of commands allowed before triggering a snapshot.
+```rust
+db.snapshot_command_count(SNAPSHOT_COMMAND_COUNT);
 ```
 
 ## Threading
@@ -103,9 +115,9 @@ The engine implements `Clone` and one instance should be created on startup, the
 
 The model and storage access internally is wrapped in a `RwLock` to support multiple reads(queries) or one write(command) at any given time.
 ```rust
-let en = engine.clone();
+let db2 = db.clone();
 let handle = thread::spawn(move || {
-    en.execute(&InsertOrder {
+    db2.execute(&InsertOrder {
         name: fake_name(),
         order_id: fake_id(),
         transport_id: fake_id(),

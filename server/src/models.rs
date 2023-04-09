@@ -1,12 +1,13 @@
-use rustc_hash::FxHashMap;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Encode, Decode, Default)]
 pub struct EcomModel {
-    pub orders: FxHashMap<usize, Order>,
+    pub orders: HashMap<usize, Order>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub order_id: usize,
     pub name: String,

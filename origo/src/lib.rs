@@ -13,9 +13,7 @@ macro_rules! origo_engine {
     }};
 
     ($engine:ident $model:ty, $command:ty) => {
-        $engine = $engine.register_command::<$command>(stringify!($command), Box::new(|storage, data, model| {
-            $crate::storage::Storage::restore_command::<$model, $command>(storage, data, model);
-        }));
+        $engine = $engine.register_command::<$command>(stringify!($command));
     };
 
     ($engine:ident $model:ty, $command:ty, $($commands:ty),+) => {
